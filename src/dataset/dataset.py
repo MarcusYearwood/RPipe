@@ -54,9 +54,31 @@ def make_dataset(data_name, verbose=True):
         dataset_['test'].transform = dataset.Compose([
             transforms.ToTensor(),
             transforms.Normalize(*data_stats[data_name])])
-    else:
+    elif data_name in ['VCTK']:
+        dataset_['train'] = eval('dataset.{}(root=root, split="train", '
+                                 'transform=None)'.format(data_name))
+        dataset_['test'] = eval('dataset.{}(root=root, split="test", '
+                                'transform=None, validation=True)'.format(data_name))
+        dataset_['val'] = eval('dataset.{}(root=root, split="val", '
+                                'transform=None, validation=True)'.format(data_name))
+        # dataset_['train'].transform = dataset.Compose([
+        #     # transforms.RandomCrop(32, padding=4, padding_mode='reflect'), ADD ANY AUGMENTATIONS HERE OR ELSEWHERE
+        #     transforms.ToTensor()])
+        # dataset_['test'].transform = dataset.Compose([
+        #     transforms.ToTensor()])
+    else: 
         raise ValueError('Not valid dataset name')
-    if verbose:
+    if verbose and data_name not in ['VCTK']:
+        dataset_['train'] = eval('dataset.{}(root=root, split="train", '
+                                 'transform=dataset.Compose([transforms.ToTensor()])'.format(data_name)) 
+        dataset_['test'] = eval('dataset.{}(root=root, split="test", '
+                                'transform=dataset.Compose([transforms.ToTensor()]))'.format(data_name))
+        dataset_['train'].transform = dataset.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(*data_stats[data_name])])
+        dataset_['test'].transform = dataset.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(*data_stats[data_name])])
         print('data ready')
     return dataset_
 
@@ -121,3 +143,55 @@ def process_dataset(dataset):
         cfg['eval_period'] = int(np.ceil(len(processed_dataset['train']) / cfg['batch_size']))
         cfg[cfg['tag']]['optimizer']['num_steps'] = cfg['num_steps']
     return processed_dataset
+
+
+# class Collater(object):
+#     """
+#     Args:
+#       adaptive_batch_size (bool): if true, decrease batch size when long data comes.
+#     """
+
+#     def __init__(self):
+#         self.text_pad_index = 0
+#         self.min_mel_length = 192
+#         self.max_mel_length = 192
+        
+
+#     def __call__(self, batch):
+#         # batch[0] = wave, mel, text, f0, speakerid
+#         batch_size = len(batch)
+
+#         # sort by mel length
+#         lengths = [b[1].shape[1] for b in batch]
+#         batch_indexes = np.argsort(lengths)[::-1]
+#         batch = [batch[bid] for bid in batch_indexes]
+
+#         nmels = batch[0][1].size(0)
+#         max_mel_length = max([b[1].shape[1] for b in batch])
+#         max_text_length = max([b[2].shape[0] for b in batch])
+        
+#         labels = torch.zeros((batch_size)).long()
+#         mels = torch.zeros((batch_size, nmels, max_mel_length)).float()
+#         texts = torch.zeros((batch_size, max_text_length)).long()
+#         input_lengths = torch.zeros(batch_size).long()
+#         output_lengths = torch.zeros(batch_size).long()
+#         ref_mels = torch.zeros((batch_size, nmels, self.max_mel_length)).float()
+#         ref_labels = torch.zeros((batch_size)).long()
+#         paths = ['' for _ in range(batch_size)]
+        
+#         for bid, (wave, label, mel, text, ref_mel, ref_label, path) in enumerate(batch):
+#             mel_size = mel.size(1)
+#             text_size = text.size(0)
+#             labels[bid] = label
+#             mels[bid, :, :mel_size] = mel
+#             texts[bid, :text_size] = text
+#             input_lengths[bid] = text_size
+#             output_lengths[bid] = mel_size
+#             paths[bid] = path
+            
+#             ref_mel_size = ref_mel.size(1)
+#             ref_mels[bid, :, :ref_mel_size] = ref_mel
+            
+#             ref_labels[bid] = ref_label
+                        
+#         return wave, texts, input_lengths, mels, output_lengths, labels, ref_mels, ref_labels
