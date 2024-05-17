@@ -13,6 +13,12 @@ def make_metric(split, **kwargs):
         best_metric_name = 'Accuracy'
         for k in metric_name:
             metric_name[k].extend(['Loss', 'Accuracy'])
+    if data_name in ['VCTK']:
+        best = -float('inf')
+        best_direction = 'down'
+        best_metric_name = 'MSE'
+        for k in metric_name:
+            metric_name[k].extend(['Loss', 'MSE'])
     else:
         raise ValueError('Not valid data name')
     metric = Metric(metric_name, best, best_direction, best_metric_name)

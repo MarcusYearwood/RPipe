@@ -6,6 +6,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
 from config import cfg
+from torch.nn.utils.rnn import pad_sequence
 
 data_stats = {'MNIST': ((0.1307,), (0.3081,)), 'FashionMNIST': ((0.2860,), (0.3530,)),
               'CIFAR10': ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
@@ -56,21 +57,16 @@ def make_dataset(data_name, verbose=True):
             transforms.Normalize(*data_stats[data_name])])
     elif data_name in ['VCTK']:
         dataset_['train'] = eval('dataset.{}(root=root, split="train", '
-                                 'transform=None)'.format(data_name))
+                                 'transform=dataset.Compose([transforms.ToTensor()]))'.format(data_name)) 
         dataset_['test'] = eval('dataset.{}(root=root, split="test", '
-                                'transform=None, validation=True)'.format(data_name))
-        dataset_['val'] = eval('dataset.{}(root=root, split="val", '
-                                'transform=None, validation=True)'.format(data_name))
-        # dataset_['train'].transform = dataset.Compose([
-        #     # transforms.RandomCrop(32, padding=4, padding_mode='reflect'), ADD ANY AUGMENTATIONS HERE OR ELSEWHERE
-        #     transforms.ToTensor()])
-        # dataset_['test'].transform = dataset.Compose([
-        #     transforms.ToTensor()])
+                                'transform=dataset.Compose([transforms.ToTensor()]))'.format(data_name))
+        dataset_['val'] = eval('dataset.{}(root=root, split="test", '
+                                'transform=dataset.Compose([transforms.ToTensor()]))'.format(data_name))
     else: 
         raise ValueError('Not valid dataset name')
     if verbose and data_name not in ['VCTK']:
         dataset_['train'] = eval('dataset.{}(root=root, split="train", '
-                                 'transform=dataset.Compose([transforms.ToTensor()])'.format(data_name)) 
+                                 'transform=dataset.Compose([transforms.ToTensor()]))'.format(data_name)) 
         dataset_['test'] = eval('dataset.{}(root=root, split="test", '
                                 'transform=dataset.Compose([transforms.ToTensor()]))'.format(data_name))
         dataset_['train'].transform = dataset.Compose([
@@ -89,7 +85,14 @@ def input_collate(input):
     for k, v in first.items():
         if v is not None and not isinstance(v, str):
             if isinstance(v, torch.Tensor):
-                batch[k] = torch.stack([f[k] for f in input])
+                try:
+                    batch[k] = torch.stack([f[k] for f in input])
+                except RuntimeError:
+                    if k in ['text_tensor']:
+                        tensor_list = [f[k] for f in input]
+                        batch[k] = pad_sequence(tensor_list, batch_first=True, padding_value=-1)
+                    else:
+                        batch[k] = torch.stack([f[k] for f in input]) # return same error if not text tensor
             elif isinstance(v, np.ndarray):
                 batch[k] = torch.tensor(np.stack([f[k] for f in input]))
             else:
@@ -128,6 +131,8 @@ def make_data_loader(dataset, batch_size, num_steps=None, step=0, step_period=1,
                                             collate_fn=make_data_collate(collate_mode),
                                             worker_init_fn=np.random.seed(seed))
             else:
+                a = dataset[k]
+                b = batch_size[k]
                 data_loader[k] = DataLoader(dataset=dataset[k], batch_size=batch_size[k], shuffle=False,
                                             pin_memory=pin_memory, num_workers=num_workers,
                                             collate_fn=make_data_collate(collate_mode),
